@@ -15,6 +15,7 @@ CONFIG_TEMPLATE = {
     "gmail": "alias@gmail.com",
     "password": "",
     "android_id": "0000000000000000",
+    "oauth_token": "oauth2_4/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 }
 
 
@@ -31,9 +32,13 @@ def get_configs():
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             config = json.load(f)
-        for key in CONFIG_TEMPLATE:
-            if key not in config:
-                raise KeyError(f"Missing key '{key}' in config file.")
+        
+        if 'gmail' not in config:
+            raise KeyError(f"Missing key 'gmail' in config file.")
+        if 'android_id' not in config:
+            raise KeyError(f"Missing key 'android_id' in config file.")
+        if 'password' not in config and 'oauth_token' not in config:
+            raise KeyError(f"Missing key: either 'password' or 'oauth_token' must be provided in config file.")
         return config
     except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
         print(f"Error loading configuration: {e}")
@@ -108,7 +113,7 @@ def download_file(file, stream):
 class WaBackup:
     """Class to access WhatsApp backups stored in Google Drive."""
 
-    def __init__(self, gmail, password, android_id):
+    def __init__(self, android_id, gmail, password=None, oauth_token=None):
         """
         Initialize the WaBackup instance.
 
@@ -120,7 +125,12 @@ class WaBackup:
         Raises:
             SystemExit: If login fails.
         """
-        token = gpsoauth.perform_master_login(gmail, password, android_id)
+        if oauth_token is not None:
+            token = gpsoauth.exchange_token(gmail, oauth_token, android_id)
+            print("oauth")
+        else:
+            token = gpsoauth.perform_master_login(gmail, password, android_id)            
+            print(token)
         if "Token" not in token:
             quit(token)
         self.auth = gpsoauth.perform_oauth(
