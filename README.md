@@ -41,10 +41,14 @@ won't be re-downloaded when running the tool one more time. After
 downloading, you may verify the integrity of the downloaded files using
 `md5sum --check md5sum.txt` on Linux or [md5summer](http://md5summer.org/) on Windows.
 
+### Alternative authentication method
+
+Instead of email and password, you can use an OAuth token to auth with Google. To obtain the value of the token, follow the instructions [here](https://github.com/rukins/gpsoauth-java/blob/b74ebca999d0f5bd38a2eafe3c0d50be552f6385/README.md#receiving-an-authentication-token). The token value should be in the format `oauth2_4/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`. Put this into the `settings.json` file, and re-build and re-run the docker container. Note that this token expires quickly, and can be used only once. If this happend, you can just obtain a fresh token, replace the value in `settings.json` and re-build the docker container.
+
 ## Troubleshooting
 
-1.  If you have `Error:Need Browser`, go to this url to solve the issue:
-    https://accounts.google.com/b/0/DisplayUnlockCaptcha
+1. ~~If you have `Error:Need Browser`, go to this url to solve the issue: https://accounts.google.com/b/0/DisplayUnlockCaptcha~~ Link no longer works 2025-12-11
+2. If you experience issues authenticating (BadAuthentication errors) with Google using you email and password, you can try using the oauth token cookie instead of the password. See [Alternative authentication method](#alternative-authentication-method)
 
 ## Credits
 -------
