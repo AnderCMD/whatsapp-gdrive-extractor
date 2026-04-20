@@ -8,6 +8,9 @@ import hashlib
 import json
 import os
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 
 
 CONFIG_FILE = "settings.json"
@@ -141,6 +144,16 @@ class WaBackup:
             "com.whatsapp",
             "38a0f7d505fe18fec64fbf343ecaaaf310dbd799",
         )
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=5,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+
 
     def get(self, path, params=None, **kwargs):
         """
@@ -155,22 +168,18 @@ class WaBackup:
             requests.Response: The response object from the GET request.
         """
         try:
-            response = requests.get(
+            response = self.session.get(
                 f"https://backup.googleapis.com/v1/{path}",
                 headers={"Authorization": f"Bearer {self.auth['Auth']}"},
                 params=params,
                 **kwargs,
             )
             response.raise_for_status()
-        except requests.exceptions.HTTPError as errh:
-            print ("\n\nHttp Error:",errh)
-        except requests.exceptions.ConnectionError as errc:
-            print ("\n\nError Connecting:",errc)
-        except requests.exceptions.Timeout as errt:
-            print ("\n\nTimeout Error:",errt)
+            return response
         except requests.exceptions.RequestException as err:
-            print ("\n\nOOps: Something Else",err)
-        return response
+            print(f"\n\nRequest Error: {err}")
+            raise
+
 
     def get_page(self, path, page_token=None):
         """
@@ -237,17 +246,22 @@ class WaBackup:
             file (dict): The file item to fetch.
 
         Returns:
-            tuple: A tuple containing the file name, size, and MD5 hash.
+            tuple: A tuple containing the file name, size, and MD5 hash, or None on failure.
         """
         name = os.path.sep.join(file["name"].split("/")[3:])
-        md5Hash = b64decode(file["md5Hash"], validate=True)
-        if not have_file(name, int(file["sizeBytes"]), md5Hash):
-            download_file(
-                name,
-                self.get(file["name"].replace("%", "%25").replace("+", "%2B"), {"alt": "media"}, stream=True)
-            )
+        try:
+            md5Hash = b64decode(file["md5Hash"], validate=True)
+            if not have_file(name, int(file["sizeBytes"]), md5Hash):
+                download_file(
+                    name,
+                    self.get(file["name"].replace("%", "%25").replace("+", "%2B"), {"alt": "media"}, stream=True)
+                )
 
-        return name, int(file["sizeBytes"]), md5Hash
+            return name, int(file["sizeBytes"]), md5Hash
+        except Exception as e:
+            print(f"\nError fetching {name}: {e}")
+            return None
+
 
     def fetch_all(self, backup, cksums):
         """
@@ -266,11 +280,14 @@ class WaBackup:
                 lambda file: self.fetch(file),
                 files
             )
-            for name, size, md5Hash in downloads:
-                num_files += 1
-                total_size += size
+            for result in downloads:
+                if result:
+                    name, size, md5Hash = result
+                    num_files += 1
+                    total_size += size
+                    cksums.write(f"{md5Hash.hex()} *{name}\n")
                 pbar.update(1)
-                cksums.write(f"{md5Hash.hex()} *{name}\n")
+
 
         print(f"\n{num_files} files ({human_size(total_size)})")
 
