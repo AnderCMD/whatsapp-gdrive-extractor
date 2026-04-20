@@ -252,10 +252,12 @@ class WaBackup:
         try:
             md5Hash = b64decode(file["md5Hash"], validate=True)
             if not have_file(name, int(file["sizeBytes"]), md5Hash):
-                download_file(
-                    name,
-                    self.get(file["name"].replace("%", "%25").replace("+", "%2B"), {"alt": "media"}, stream=True)
-                )
+                with self.get(
+                    file["name"].replace("%", "%25").replace("+", "%2B"),
+                    {"alt": "media"},
+                    stream=True,
+                ) as response:
+                    download_file(name, response)
 
             return name, int(file["sizeBytes"]), md5Hash
         except Exception as e:
