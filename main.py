@@ -18,7 +18,8 @@ CONFIG_TEMPLATE = {
     "gmail": "alias@gmail.com",
     "password": "",
     "android_id": "0000000000000000",
-    "oauth_token": "oauth2_4/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    "oauth_token": "oauth2_4/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "download_path": os.path.join(os.path.expanduser("~"), "Downloads", "WhatsApp Backups")
 }
 
 
@@ -42,6 +43,8 @@ def get_configs():
             raise KeyError(f"Missing key 'android_id' in config file.")
         if 'password' not in config and 'oauth_token' not in config:
             raise KeyError(f"Missing key: either 'password' or 'oauth_token' must be provided in config file.")
+        if 'download_path' not in config:
+            config['download_path'] = os.path.join(os.path.expanduser("~"), "Downloads", "WhatsApp Backups")
         return config
     except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
         print(f"Error loading configuration: {e}")
@@ -116,7 +119,7 @@ def download_file(file, stream):
 class WaBackup:
     """Class to access WhatsApp backups stored in Google Drive."""
 
-    def __init__(self, android_id, gmail, password=None, oauth_token=None):
+    def __init__(self, android_id, gmail, password=None, oauth_token=None, download_path=None):
         """
         Initialize the WaBackup instance.
 
@@ -124,10 +127,12 @@ class WaBackup:
             gmail (str): The user's Gmail address.
             password (str): The user's Gmail password.
             android_id (str): The user's Android ID.
+            download_path (str): The path to save downloaded files.
 
         Raises:
             SystemExit: If login fails.
         """
+        self.download_path = download_path or os.path.join(os.path.expanduser("~"), "Downloads", "WhatsApp Backups")
         if oauth_token is not None:
             token = gpsoauth.exchange_token(gmail, oauth_token, android_id)
             print("oauth")
@@ -248,7 +253,8 @@ class WaBackup:
         Returns:
             tuple: A tuple containing the file name, size, and MD5 hash, or None on failure.
         """
-        name = os.path.sep.join(file["name"].split("/")[3:])
+        relative_name = os.path.sep.join(file["name"].split("/")[3:])
+        name = os.path.join(self.download_path, relative_name)
         try:
             md5Hash = b64decode(file["md5Hash"], validate=True)
             if not have_file(name, int(file["sizeBytes"]), md5Hash):
@@ -287,7 +293,8 @@ class WaBackup:
                     name, size, md5Hash = result
                     num_files += 1
                     total_size += size
-                    cksums.write(f"{md5Hash.hex()} *{name}\n")
+                    relative_name = os.path.sep.join(name.replace(self.download_path, "").lstrip(os.path.sep).split(os.path.sep))
+                    cksums.write(f"{md5Hash.hex()} *{relative_name}\n")
                 pbar.update(1)
 
 
@@ -373,7 +380,8 @@ def list_all():
                 try:
                     num_files += 1
                     total_size += int(file["sizeBytes"])
-                    print(os.path.sep.join(file["name"].split("/")[3:]))
+                    relative_name = os.path.sep.join(file["name"].split("/")[3:])
+                    print(relative_name)
                 except Exception as e:
                     print(f"\nError processing file: {e}")
             print(f"{num_files} files ({human_size(total_size)})")
@@ -387,7 +395,9 @@ def sync():
     MD5 checksums of the downloaded files to a text file named 'md5sum.txt'.
     """
     wa_backup, backups = load_backups()
-    with open("md5sum.txt", "w", encoding="utf-8", buffering=1) as cksums:
+    os.makedirs(wa_backup.download_path, exist_ok=True)
+    md5sum_path = os.path.join(wa_backup.download_path, "md5sum.txt")
+    with open(md5sum_path, "w", encoding="utf-8", buffering=1) as cksums:
         for backup in backups:
             if get_user_confirmation(backup["name"].split("/")[-1]):
                 print(f"Backup Size: {human_size(int(backup['sizeBytes']))} Upload Time: {backup['updateTime']}")
